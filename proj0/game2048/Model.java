@@ -5,7 +5,7 @@ import java.util.Observable;
 
 
 /** The state of a game of 2048.
- *  @author TODO: YOUR NAME HERE
+ *  @author fanfei
  */
 public class Model extends Observable {
     /** Current contents of the board. */
@@ -107,16 +107,60 @@ public class Model extends Observable {
      *    and the trailing tile does not.
      * */
     public boolean tilt(Side side) {
-        boolean changed;
-        changed = false;
+        boolean changed = false;
 
-        // TODO: Modify this.board (and perhaps this.score) to account
         // for the tilt to the Side SIDE. If the board changed, set the
         // changed local variable to true.
+        board.setViewingPerspective(side);
+        int size = board.size();
+        for (int col = 0; col < size; col += 1) {
+            changed |= tiltColumn(col);
+        }
+        board.setViewingPerspective(Side.NORTH);
 
         checkGameOver();
         if (changed) {
             setChanged();
+        }
+        return changed;
+    }
+
+    /**
+     * Tilt the col Column.
+     * @param col Column number
+     * @return whether merge happened
+     */
+    private boolean tiltColumn(int col) {
+        boolean changed = false;
+        int size = board.size();
+        int firstCombinableTile = size - 1;
+        for (int row = size - 2; row >= 0; row -= 1) {
+            Tile tile = board.tile(col, row);
+            if (tile == null) {
+                continue;
+            }
+            Tile firstTile = board.tile(col, firstCombinableTile);
+            if (firstTile == null) {
+                board.move(col, firstCombinableTile, tile);
+                changed = true;
+            } else {
+                if (firstTile.value() == tile.value()) {
+                    board.move(col, firstCombinableTile, tile);
+                    firstCombinableTile -= 1;
+                    changed = true;
+                    score += tile.value() * 2;
+                } else {
+                    if (row + 1 < firstCombinableTile) {
+                        // there are empty tiles between firstCombineTile and currentTile
+                        // so, move currentTile to the empty tile under firstCombineTile
+                        board.move(col, firstCombinableTile - 1, tile);
+                        changed = true;
+                        firstCombinableTile -= 1;
+                    } else {
+                        firstCombinableTile = row;
+                    }
+                }
+            }
         }
         return changed;
     }
@@ -137,7 +181,11 @@ public class Model extends Observable {
      *  Empty spaces are stored as null.
      * */
     public static boolean emptySpaceExists(Board b) {
-        // TODO: Fill in this function.
+        for (Tile tile : b) {
+            if (tile == null) {
+                return true;
+            }
+        }
         return false;
     }
 
@@ -147,7 +195,11 @@ public class Model extends Observable {
      * given a Tile object t, we get its value with t.value().
      */
     public static boolean maxTileExists(Board b) {
-        // TODO: Fill in this function.
+        for (Tile tile : b) {
+            if (tile != null && tile.value() == MAX_PIECE) {
+                return true;
+            }
+        }
         return false;
     }
 
@@ -158,10 +210,34 @@ public class Model extends Observable {
      * 2. There are two adjacent tiles with the same value.
      */
     public static boolean atLeastOneMoveExists(Board b) {
-        // TODO: Fill in this function.
-        return false;
+        // If we can move to NORTH, so as South.
+        return checkMoveValid(b, Side.NORTH) || checkMoveValid(b, Side.EAST);
     }
 
+    /**
+     * Returns whether we can move to direction side.
+     * 1. There is at least one empty space in a column.
+     * 2. There are two adjacent tiles with the same value in a column.
+     */
+    private static boolean checkMoveValid(Board b, Side side) {
+        b.setViewingPerspective(side);
+        int size = b.size();
+        for (int col = 0; col < size; col += 1) {
+            Tile prev = null;
+            for (int row = 0; row < size; row += 1) {
+                Tile tile = b.tile(col, row);
+                if (tile == null) {
+                    return true;
+                } else {
+                    if (prev != null && prev.value() == tile.value()) {
+                        return true;
+                    }
+                    prev = tile;
+                }
+            }
+        }
+        return false;
+    }
 
     @Override
      /** Returns the model as a string, used for debugging. */
