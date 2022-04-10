@@ -1,5 +1,6 @@
 package deque;
 
+import edu.princeton.cs.algs4.StdRandom;
 import org.junit.Test;
 import static org.junit.Assert.*;
 
@@ -91,5 +92,79 @@ public class ArrayDequeTest {
         for (double i = 999999; i > 500000; i--) {
             assertEquals("Should have the same value", i, (double) ad1.removeLast(), 0.0);
         }
+    }
+
+    @Test
+    public void randomizedTest() {
+        ArrayDeque<Integer> ad = new ArrayDeque<>();
+        LinkedListDeque<Integer> ld = new LinkedListDeque<>();
+
+        int N = 50000;
+        for (int i = 0; i < N; i += 1) {
+            int operationNumber = StdRandom.uniform(0, 8);
+            if (operationNumber == 0) {
+                // addFirst
+                int randVal = StdRandom.uniform(0, 100);
+                ad.addFirst(randVal);
+                ld.addFirst(randVal);
+            } else if (operationNumber == 1) {
+                // addLast
+                int randVal = StdRandom.uniform(0, 100);
+                ad.addLast(randVal);
+                ld.addLast(randVal);
+            } else if (operationNumber == 2) {
+                // isEmpty
+                assertEquals(ad.isEmpty(), ld.isEmpty());
+            } else if (operationNumber == 3) {
+                // size
+                assertEquals(ad.size(), ld.size());
+            } else if (operationNumber == 4) {
+                // removeFirst
+                assertEquals(ad.removeFirst(), ld.removeFirst());
+            } else if (operationNumber == 5) {
+                // removeLast
+                assertEquals(ad.removeLast(), ld.removeLast());
+            } else if (operationNumber == 6) {
+                // get
+                assertEquals(ad.size(), ld.size());
+                int size = ad.size();
+                if (size > 0) {
+                    int randIdx = StdRandom.uniform(0, size);
+                    assertEquals(ad.get(randIdx), ld.get(randIdx));
+                }
+            }
+        }
+    }
+
+    @Test
+    public void iteratorTest() {
+        ArrayDeque<String> ad = new ArrayDeque<>();
+        String[] str = {"Danny", "Boodman", "T.D.Lemon", "1900"};
+        for (String s : str) {
+            ad.addLast(s);
+        }
+        int i = 0;
+        for (String s : ad) {
+            assertEquals(s, str[i]);
+            i += 1;
+        }
+    }
+
+    @Test
+    public void equalsTest() {
+        String[] strs = {"Danny", "Boodman", "T.D.Lemon", "1900"};
+        ArrayDeque<String> ad1 = new ArrayDeque<>();
+        ArrayDeque<String> ad2 = new ArrayDeque<>();
+        LinkedListDeque<String> ld = new LinkedListDeque<>();
+        ArrayDeque<String> ad3 = new ArrayDeque<>();
+        for (String s : strs) {
+            ad1.addLast(s);
+            ad2.addLast(s);
+            ld.addLast(s);
+            ad3.addFirst(s);
+        }
+        assertTrue(ad1.equals(ad2));
+        assertTrue(ad1.equals(ld));
+        assertFalse(ad1.equals(ad3));
     }
 }

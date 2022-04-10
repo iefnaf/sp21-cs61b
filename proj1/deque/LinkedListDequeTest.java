@@ -106,4 +106,37 @@ public class LinkedListDequeTest {
             assertEquals("Should have the same value", i, (double) lld1.removeLast(), 0.0);
         }
     }
+
+    @Test
+    public void iteratorTest() {
+        LinkedListDeque<String> ld = new LinkedListDeque<>();
+        String[] str = {"Danny", "Boodman", "T.D.Lemon", "1900"};
+        for (String s : str) {
+            ld.addLast(s);
+        }
+
+        int i = 0;
+        for (String s : ld) {
+            assertEquals(s, str[i]);
+            i += 1;
+        }
+    }
+
+    @Test
+    public void equalsTest() {
+        String[] strs = {"Danny", "Boodman", "T.D.Lemon", "1900"};
+        LinkedListDeque<String> ld1 = new LinkedListDeque<>();
+        LinkedListDeque<String> ld2 = new LinkedListDeque<>();
+        ArrayDeque<String> ad = new ArrayDeque<>();
+        LinkedListDeque<String> ld3 = new LinkedListDeque<>();
+        for (String s : strs) {
+            ld1.addLast(s);
+            ld2.addLast(s);
+            ad.addLast(s);
+            ld3.addFirst(s);
+        }
+        assertTrue(ld1.equals(ld2));
+        assertTrue(ld1.equals(ad));
+        assertFalse(ld1.equals(ld3));
+    }
 }

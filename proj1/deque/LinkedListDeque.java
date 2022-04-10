@@ -8,7 +8,7 @@ import java.util.Iterator;
  * @author gfanfei@gmail.com
  * @date 2021.4.7 15:42
  */
-public class LinkedListDeque<T> implements Deque<T> {
+public class LinkedListDeque<T> implements Deque<T>, Iterable<T> {
     private int size;
     private LinkedListNode sentFront;
     private LinkedListNode sentBack;
@@ -47,11 +47,6 @@ public class LinkedListDeque<T> implements Deque<T> {
         sentBack.prev.next = newNode;
         sentBack.prev = newNode;
         size += 1;
-    }
-
-    @Override
-    public boolean isEmpty() {
-        return size == 0;
     }
 
     @Override
@@ -100,7 +95,7 @@ public class LinkedListDeque<T> implements Deque<T> {
         if (index >= size()) {
             return null;
         }
-        LinkedListNode node = sentFront;
+        LinkedListNode node = sentFront.next;
         for (int i = 0; i < index; i += 1) {
             node = node.next;
         }
@@ -123,6 +118,58 @@ public class LinkedListDeque<T> implements Deque<T> {
 
     @Override
     public Iterator<T> iterator() {
-        return null;
+        return new LinkedListIterator();
+    }
+
+    private class LinkedListIterator implements Iterator<T> {
+        private LinkedListNode wizPos;
+
+        LinkedListIterator() {
+            wizPos = sentFront.next;
+        }
+
+        @Override
+        public boolean hasNext() {
+            return wizPos != sentBack;
+        }
+
+        @Override
+        public T next() {
+            T returnItem = wizPos.item;
+            wizPos = wizPos.next;
+            return returnItem;
+        }
+    }
+
+    /**
+     * Returns whether the parameter o is equal to the Deque.
+     * o is considered equal if it is a Deque and
+     * if it contains the same contents in the same order.
+     */
+    @Override
+    public boolean equals(Object o) {
+        if (o == null) {
+            return false;
+        }
+        if (this == o) {
+            return true;
+        }
+        if (!(o instanceof Deque)) {
+            return false;
+        }
+        Deque<T> other = (Deque<T>) o;
+        if (this.size() != other.size()) {
+            return false;
+        }
+        int i = 0;
+        LinkedListNode h1 = sentFront.next;
+        while (h1 != sentBack) {
+            if (!h1.item.equals(other.get(i))) {
+                return false;
+            }
+            h1 = h1.next;
+            i += 1;
+        }
+        return true;
     }
 }
