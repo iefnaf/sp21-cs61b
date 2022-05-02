@@ -393,9 +393,17 @@ public class Repository {
             exitWithError("No commit with that id exists.");
         }
 
+        // If a working file is untracked in the current branch and
+        // is tracked in the target commit,
+        // it would be overwritten by the checkout.
         Set<String> untrackedFiles = getUntrackedFiles();
-        if (!untrackedFiles.isEmpty()) {
-            exitWithError("There is an untracked file in the way; delete it, or add and commit it first.");
+        Set<String> targetTrackedFiles = getTrackedFiles(targetCommitId);
+        assert (targetTrackedFiles != null);
+        for (String file : untrackedFiles) {
+            if (targetTrackedFiles.contains(file)) {
+                exitWithError("There is an untracked file in the way; " +
+                        "delete it, or add and commit it first.");
+            }
         }
 
         // delete files exists in target commit but not exists in current commit.
@@ -690,6 +698,7 @@ public class Repository {
     }
 
     /**
+     * Helper function for status.
      * Return untracked files.
      * Untracked Files is files present in the working directory
      * but neither staged for addition nor tracked.
@@ -699,8 +708,7 @@ public class Repository {
         String headCommitId = getHeadCommitId();
         Set<String> trackedFiles = getTrackedFiles(headCommitId);
         Set<String> untrackedFiles = new HashSet<>();
-        List<String> workingFiles = plainFilenamesIn(CWD);
-        assert(workingFiles != null);
+        Set<String> workingFiles = getWorkingFiles();
         for (String file : workingFiles) {
             if (!addition.contains(file) && !trackedFiles.contains(file)) {
                 untrackedFiles.add(file);
