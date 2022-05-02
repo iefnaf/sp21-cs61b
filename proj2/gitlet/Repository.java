@@ -322,10 +322,15 @@ public class Repository {
                     exitWithError("No need to checkout the current branch.");
                 }
 
+                String currentCommitId = getHeadCommitId();
                 String targetCommitId = readBranch(targetBranch);
                 handleReset(targetCommitId);
 
-                // don't forget to modify HEAD
+                // handleReset will write targetCommitId in current branch,
+                // but we should not modify it.
+                writeBranch(currentBranch, currentCommitId);
+
+                // don't forget to modify current branch
                 setCurrentBranch(targetBranch);
             }
             case 3 -> {
