@@ -597,7 +597,7 @@ public class Repository {
 
         StringBuilder sb = new StringBuilder();
         Formatter formatter = new Formatter(sb);
-        SimpleDateFormat sdf = new SimpleDateFormat("E M d HH:mm:ss yyyy Z", Locale.ENGLISH);
+        SimpleDateFormat sdf = new SimpleDateFormat("EEE MMM d HH:mm:ss yyyy Z", Locale.ENGLISH);
         Commit commit = Commit.fromFile(commitId);
 
         sb.append("===\n");
