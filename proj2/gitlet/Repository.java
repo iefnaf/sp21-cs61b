@@ -230,11 +230,27 @@ public class Repository {
         }
         sb.append("\n");
 
-        // todo: Modifications Not Staged For Commit
+        // print files that were modified but not staged
+        sb.append("=== Modifications Not Staged For Commit ===\n");
+        Set<String> modifiedNotStagedFiles = getModifiedNotStagedFiles();
+        for (String file : modifiedNotStagedFiles) {
+            sb.append(file).append(" (modified)").append("\n");
+        }
+        Set<String> deletedNotStagedFiles = getDeletedNotStagedFiles();
+        for (String file : deletedNotStagedFiles) {
+            sb.append(file).append(" (deleted)").append("\n");
+        }
+        sb.append("\n");
 
-        // todo: Untracked Files
+        // print untracked files
+        sb.append("=== Untracked Files ===\n");
+        Set<String> untrackedFiles = getUntrackedFiles();
+        for (String file : untrackedFiles) {
+            sb.append(file).append("\n");
+        }
+        sb.append("\n");
 
-        System.out.println(sb);
+        System.out.print(sb);
     }
 
     /**
@@ -517,6 +533,29 @@ public class Repository {
         file.delete();
     }
 
+    /** Return all files in the working directory. */
+    private static Set<String> getWorkingFiles() {
+        Set<String> workingFiles = new HashSet<>();
+        List<String> workingFilesList = plainFilenamesIn(CWD);
+        if (workingFilesList == null) {
+            return workingFiles;
+        }
+        workingFiles.addAll(workingFilesList);
+        return workingFiles;
+    }
+
+    /** Return all files and its hash in the working directory. */
+    private static Map<String, String> getWorkingMap() {
+        Set<String> workingFiles = getWorkingFiles();
+        HashMap<String, String> workingMap = new HashMap<>();
+        for (String fileName : workingFiles) {
+            String contents = readWorkingFile(fileName);
+            String hash = sha1(contents);
+            workingMap.put(fileName, hash);
+        }
+        return workingMap;
+    }
+
     // ==================== other helper functions ====================
 
     /** Create gitlet related directories. */
@@ -554,16 +593,62 @@ public class Repository {
     }
 
     /**
-     * A file in the working directory is “modified but not staged” if it is
-     * 1. Tracked in the current commit, changed in the working directory, but not staged
+     * Helper function for status command.
+     * A file in the working directory is “modified but not staged” if it is:
+     * 1. Tracked in the current commit, changed in the working directory, but not staged for addition
      * 2. Staged for addition, but with different contents than in the working directory
-     * 3. Staged for addition, but deleted in the working directory
-     * 4. Not staged for removal, but tracked in the current commit and deleted from the working directory
      */
     private static Set<String> getModifiedNotStagedFiles() {
-        // todo
-        Set<String> files = new HashSet<>();
-        return files;
+        Set<String> modified = new HashSet<>();
+
+        Commit headC = getHeadCommit();
+        Map<String, String> currentMap = headC.getMap();
+        Map<String, String> workingMap = getWorkingMap();
+        Map<String, String> additionMap = readAddition();
+
+        for (String fileName : workingMap.keySet()) {
+            String hash = workingMap.get(fileName);
+            if (additionMap.containsKey(fileName)) {
+                if (!additionMap.get(fileName).equals(hash)) {
+                    modified.add(fileName);
+                }
+            } else {
+                if (currentMap.containsKey(fileName) && !currentMap.get(fileName).equals(hash)) {
+                    modified.add(fileName);
+                }
+            }
+        }
+
+        return modified;
+    }
+
+    /**
+     * Helper function for status command.
+     * A file in the working directory is “deleted but not staged” if it is:
+     * 1. Tracked in the current commit, deleted in the working directory, but not staged for removal
+     * 2. Staged for addition, but deleted in the working directory
+     */
+    private static Set<String> getDeletedNotStagedFiles() {
+        Set<String> deleted = new HashSet<>();
+
+        String head = getHeadCommitId();
+        Set<String> trackedSet = getTrackedFiles(head);
+        Set<String> workingSet = getWorkingFiles();
+        Set<String> additionSet = getStagedFiles();
+        Set<String> removalSet = readRemoval();
+
+        for (String fileName : trackedSet) {
+            if (!workingSet.contains(fileName) && !removalSet.contains(fileName)) {
+                deleted.add(fileName);
+            }
+        }
+
+        for (String fileName : additionSet) {
+            if (!workingSet.contains(fileName)) {
+                deleted.add(fileName);
+            }
+        }
+        return deleted;
     }
 
     /**
