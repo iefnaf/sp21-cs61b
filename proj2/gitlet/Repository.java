@@ -156,7 +156,7 @@ public class Repository {
             Commit headC = Commit.fromFile(head);
             head = headC.getFirstParent();
         }
-        System.out.println(sb);
+        System.out.print(sb);
     }
 
     /** Displays information about all commits ever made. */
@@ -168,7 +168,7 @@ public class Repository {
             sb.append(logForOneCommit(commitId));
         }
 
-        System.out.println(sb);
+        System.out.print(sb);
     }
 
     /** Prints out the ids of all commits that have the given commit message. */
