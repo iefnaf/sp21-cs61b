@@ -39,7 +39,8 @@ public class Commit implements Serializable {
     /** A map contains all files and their versions. */
     private final HashMap<String, String> map;
 
-    public Commit(String message, Date date, String firstParent, String secondParent, HashMap<String, String> map) {
+    public Commit(String message, Date date, String firstParent,
+                  String secondParent, HashMap<String, String> map) {
         this.message = message;
         this.date = date;
         this.firstParent = firstParent;
@@ -109,6 +110,6 @@ public class Commit implements Serializable {
         String file = saveCommit(commit);
 
         Commit newC = fromFile(file);
-        assert(newC.equals(commit));
+        assert (newC.equals(commit));
     }
 }

@@ -13,6 +13,10 @@ public class Main {
             Utils.exitWithError("Please enter a command.");
         }
         String firstArg = args[0];
+        if (!firstArg.equals("init") && !gitletSetupTest()) {
+            Utils.exitWithError("Not in an initialized Gitlet directory.");
+        }
+
         switch (firstArg) {
             case "init" -> {
                 validateNumArgs(args, 1);
@@ -71,5 +75,9 @@ public class Main {
         if (args.length != n) {
             Utils.exitWithError("Incorrect operands.");
         }
+    }
+
+    private static boolean gitletSetupTest() {
+        return Repository.GITLET_DIR.exists();
     }
 }

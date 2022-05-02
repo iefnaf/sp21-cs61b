@@ -101,6 +101,10 @@ public class Repository {
         HashMap<String, String> addition = readAddition();
         HashSet<String> removal = readRemoval();
 
+        if (addition.isEmpty() && removal.isEmpty()) {
+            exitWithError("No changes added to the commit.");
+        }
+
         map.putAll(addition);
         removal.forEach(map::remove);
         Commit newC = new Commit(message, new Date(System.currentTimeMillis()), head, null, map);
@@ -309,6 +313,10 @@ public class Repository {
             case 2 -> {
                 // checkout [branch name]
                 String targetBranch = args[1];
+                if (!branchExists(targetBranch)) {
+                    exitWithError("No such branch exists.");
+                }
+
                 String currentBranch = getCurrentBranch();
                 if (targetBranch.equals(currentBranch)) {
                     exitWithError("No need to checkout the current branch.");
@@ -322,6 +330,9 @@ public class Repository {
             }
             case 3 -> {
                 // checkout -- [file name]
+                if (!args[1].equals("--")) {
+                    exitWithError("Incorrect operands.");
+                }
                 String fileName = args[2];
                 Commit headC = getHeadCommit();
                 HashMap<String, String> headM = headC.getMap();
@@ -335,12 +346,19 @@ public class Repository {
             }
             case 4 -> {
                 // checkout [commit id] -- [file name]
+                if (!args[2].equals("--")) {
+                    exitWithError("Incorrect operands.");
+                }
                 String commitId = args[1];
                 String fileName = args[3];
-                Commit commit = Commit.fromFile(commitId);
-                if (commit == null) {
+                if (commitId.length() < UID_LENGTH) {
+                    commitId = sid2lid(commitId);
+                }
+                if (commitId == null || !Commit.commitExists(commitId)) {
                     exitWithError("No commit with that id exists.");
                 }
+
+                Commit commit = Commit.fromFile(commitId);
                 HashMap<String, String> map = commit.getMap();
                 if (!map.containsKey(fileName)) {
                     exitWithError("File does not exist in that commit.");
@@ -363,8 +381,10 @@ public class Repository {
      * The staging area is cleared.
      */
     public static void handleReset(String targetCommitId) {
-        File commitF = join(Commit.COMMIT_FOLDER, targetCommitId);
-        if (!commitF.exists()) {
+        if (targetCommitId.length() < UID_LENGTH) {
+            targetCommitId = sid2lid(targetCommitId);
+        }
+        if (targetCommitId == null || !Commit.commitExists(targetCommitId)) {
             exitWithError("No commit with that id exists.");
         }
 
@@ -384,8 +404,9 @@ public class Repository {
         // clear staging area
         clearStagingArea();
 
-        // don't forget to modify HEAD
-        setCurrentBranch(targetCommitId);
+        // moves the current branch’s head to that commit node
+        String currentB = getCurrentBranch();
+        writeBranch(currentB, targetCommitId);
     }
 
     public static void handleMerge(String branchName) {
@@ -566,6 +587,18 @@ public class Repository {
         STAGING_FOLDER.mkdir();
         BRANCHES_FOLDER.mkdir();
         clearStagingArea();
+    }
+
+    /** Get the corresponding commit id represent by the shorted id. */
+    private static String sid2lid(String sid) {
+        List<String> commits = plainFilenamesIn(Commit.COMMIT_FOLDER);
+        assert (commits != null);
+        for (String commit : commits) {
+            if (commit.startsWith(sid)) {
+                return commit;
+            }
+        }
+        return null;
     }
 
     /**
