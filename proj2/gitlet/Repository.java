@@ -447,7 +447,8 @@ public class Repository {
         }
         String currCommitId = getHeadCommitId();
         if (splitCommitId.equals(currCommitId)) {
-            writeBranch(currB, splitCommitId);
+            String[] args = {"checkout", otherB};
+            handleCheckout(args);
             exitWithMessage("Current branch fast-forwarded.");
         }
 
