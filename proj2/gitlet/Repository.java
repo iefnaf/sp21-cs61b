@@ -447,7 +447,7 @@ public class Repository {
         }
         String currCommitId = getHeadCommitId();
         if (splitCommitId.equals(currCommitId)) {
-            handleBranch(otherB);
+            writeBranch(currB, splitCommitId);
             exitWithMessage("Current branch fast-forwarded.");
         }
 
@@ -512,6 +512,7 @@ public class Repository {
             String message = String.format("Merged %s into %s.", otherB, currB);
             handleCommit(message);
         } else {
+            System.out.println("Encountered a merge conflict.");
             for (String fileName : conflictFiles) {
                 StringBuilder sb = new StringBuilder();
                 sb.append("<<<<<<< HEAD\n");
