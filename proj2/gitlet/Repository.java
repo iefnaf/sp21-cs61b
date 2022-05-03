@@ -41,7 +41,9 @@ public class Repository {
         }
 
         // step2. create related directories
-        setupPersistence();
+        if (!setupPersistence()) {
+            exitWithError("Failed to create Gitlet related directories.");
+        }
 
         // step3. create init commit and master branch, set HEAD point to master.
         Commit initC = new Commit("initial commit", new Date(0), null, null, new HashMap<>());
@@ -60,8 +62,7 @@ public class Repository {
         }
 
         // step2. Get the hashmap of the latest commit and data structure of Staging area.
-        Commit headC = getHeadCommit();
-        HashMap<String, String> headM = headC.getMap();
+        Map<String, String> headM = getHeadMap();
         HashMap<String, String> addition = readAddition();
         HashSet<String> removal = readRemoval();
 
@@ -95,9 +96,8 @@ public class Repository {
         }
 
         String currentB = getCurrentBranch();
-        String head = readBranch(currentB);
-        Commit headC = Commit.fromFile(head);
-        HashMap<String, String> map = headC.getMap();
+        String head = getHeadCommitId();
+        Map<String, String> map = getHeadMap();
         HashMap<String, String> addition = readAddition();
         HashSet<String> removal = readRemoval();
 
@@ -123,6 +123,7 @@ public class Repository {
         // step1. Get the tracked files and data structure of Staging area.
         String head = getHeadCommitId();
         Set<String> tracked = getTrackedFiles(head);
+        assert (tracked != null);
         HashMap<String, String> addition = readAddition();
         HashSet<String> removal = readRemoval();
 
@@ -158,6 +159,7 @@ public class Repository {
         while (head != null && !head.isBlank()) {
             sb.append(logForOneCommit(head));
             Commit headC = Commit.fromFile(head);
+            assert (headC != null);
             head = headC.getFirstParent();
         }
         System.out.print(sb);
@@ -186,6 +188,7 @@ public class Repository {
         assert(commitIds != null);
         for (String commitId : commitIds) {
             Commit commit = Commit.fromFile(commitId);
+            assert (commit != null);
             if (commit.getMessage().equals(commitMessage)) {
                 sb.append(commitId).append("\n");
             }
@@ -339,15 +342,14 @@ public class Repository {
                     exitWithError("Incorrect operands.");
                 }
                 String fileName = args[2];
-                Commit headC = getHeadCommit();
-                HashMap<String, String> headM = headC.getMap();
+                Map<String, String> headM = getHeadMap();
                 if (!headM.containsKey(fileName)) {
                     exitWithError("File does not exist in that commit.");
                 }
 
                 // read the file in head commit, write it in CWD.
                 String blobName = headM.get(fileName);
-                overwriteFile(fileName, blobName);
+                overwriteWorkingFile(fileName, blobName);
             }
             case 4 -> {
                 // checkout [commit id] -- [file name]
@@ -359,23 +361,21 @@ public class Repository {
                 if (commitId.length() < UID_LENGTH) {
                     commitId = sid2lid(commitId);
                 }
-                if (commitId == null || !Commit.commitExists(commitId)) {
+                if (!Commit.commitExists(commitId)) {
                     exitWithError("No commit with that id exists.");
                 }
 
-                Commit commit = Commit.fromFile(commitId);
-                HashMap<String, String> map = commit.getMap();
+                Map<String, String> map = getTrackedMap(commitId);
+                assert (map != null);
                 if (!map.containsKey(fileName)) {
                     exitWithError("File does not exist in that commit.");
                 }
 
                 // overwrite
                 String blobName = map.get(fileName);
-                overwriteFile(fileName, blobName);
+                overwriteWorkingFile(fileName, blobName);
             }
-            default -> {
-                exitWithError("Incorrect operands.");
-            }
+            default -> exitWithError("Incorrect operands.");
         }
     }
 
@@ -386,10 +386,13 @@ public class Repository {
      * The staging area is cleared.
      */
     public static void handleReset(String targetCommitId) {
+        if (targetCommitId == null) {
+            throw new NullPointerException();
+        }
         if (targetCommitId.length() < UID_LENGTH) {
             targetCommitId = sid2lid(targetCommitId);
         }
-        if (targetCommitId == null || !Commit.commitExists(targetCommitId)) {
+        if (!Commit.commitExists(targetCommitId)) {
             exitWithError("No commit with that id exists.");
         }
 
@@ -410,9 +413,9 @@ public class Repository {
         deleteUnnecessaryFiles(targetCommitId);
 
         // overwrite files
-        Commit targetC = Commit.fromFile(targetCommitId);
-        Map<String, String> targetM = targetC.getMap();
-        targetM.forEach(Repository::overwriteFile);
+        Map<String, String> targetM = getTrackedMap(targetCommitId);
+        assert (targetM != null);
+        targetM.forEach(Repository::overwriteWorkingFile);
 
         // clear staging area
         clearStagingArea();
@@ -422,8 +425,113 @@ public class Repository {
         writeBranch(currentB, targetCommitId);
     }
 
-    public static void handleMerge(String branchName) {
+    /** Merge other branch to current branch. */
+    public static void handleMerge(String otherB) {
+        HashMap<String, String> stagedAddition = readAddition();
+        HashSet<String> stagedRemoval = readRemoval();
+        if (!stagedAddition.isEmpty() || !stagedRemoval.isEmpty()) {
+            exitWithError("You have uncommitted changes.");
+        }
+        if (!branchExists(otherB)) {
+            exitWithError("A branch with that name does not exist.");
+        }
+        String currB = getCurrentBranch();
+        if (currB.equals(otherB)) {
+            exitWithError("Cannot merge a branch with itself.");
+        }
+        String splitCommitId = findSplitPoint(otherB);
+        assert (splitCommitId != null);
+        String otherCommitId = readBranch(otherB);
+        if (splitCommitId.equals(otherCommitId)) {
+            exitWithMessage("Given branch is an ancestor of the current branch.");
+        }
+        String currCommitId = getHeadCommitId();
+        if (splitCommitId.equals(currCommitId)) {
+            handleBranch(otherB);
+            exitWithMessage("Current branch fast-forwarded.");
+        }
 
+        // we need to remove files that were only removed by other branch.
+        Set<String> currTrackedFiles = getTrackedFiles(currCommitId);
+        Set<String> splitTrackedFiles = getTrackedFiles(splitCommitId);
+        Set<String> otherTrackedFiles = getTrackedFiles(otherCommitId);
+        Set<String> currRemovedFiles = getRemovedFiles(currTrackedFiles, splitTrackedFiles);
+        Set<String> otherRemovedFiles = getRemovedFiles(otherTrackedFiles, splitTrackedFiles);
+        Set<String> filesToRemove = new HashSet<>(otherRemovedFiles);
+        filesToRemove.removeAll(currRemovedFiles);
+
+        // Any files modified in different ways in the current and given branches are in conflict.
+        Map<String, String> currMap = getTrackedMap(currCommitId);
+        assert (currMap != null);
+        Map<String, String> splitMap = getTrackedMap(splitCommitId);
+        assert (splitMap != null);
+        Map<String, String> otherMap = getTrackedMap(otherCommitId);
+        assert (otherMap != null);
+        Set<String> currModifiedFiles = getModifiedFiles(currMap, splitMap);
+        Set<String> otherModifiedFiles = getModifiedFiles(otherMap, splitMap);
+        Set<String> unConflictFiles = new HashSet<>();
+        Set<String> conflictFiles = new HashSet<>();
+        for (String file : otherModifiedFiles) {
+            if (!currModifiedFiles.contains(file)) {
+                unConflictFiles.add(file);
+            } else {
+                if (!currMap.get(file).equals(otherMap.get(file))) {
+                    conflictFiles.add(file);
+                }
+            }
+        }
+
+        Set<String> untrackedFiles = getUntrackedFiles();
+        for (String file : untrackedFiles) {
+            if (filesToRemove.contains(file) || unConflictFiles.contains(file) ||
+                    conflictFiles.contains(file)) {
+                exitWithError("There is an untracked file in the way; " +
+                        "delete it, or add and commit it first.");
+            }
+        }
+
+        HashSet<String> removal = readRemoval();
+        HashMap<String, String> addition = readAddition();
+
+        for (String fileName : filesToRemove) {
+            deleteWorkingFile(fileName);
+            addition.remove(fileName);
+            removal.add(fileName);
+        }
+
+        for (String fileName : unConflictFiles) {
+            String blobName = otherMap.get(fileName);
+            overwriteWorkingFile(fileName, blobName);
+            addition.put(fileName, blobName);
+            removal.remove(fileName);
+        }
+
+        if (conflictFiles.isEmpty()) {
+            writeAddition(addition);
+            writeRemoval(removal);
+            String message = String.format("Merged %s into %s.", otherB, currB);
+            handleCommit(message);
+        } else {
+            for (String fileName : conflictFiles) {
+                StringBuilder sb = new StringBuilder();
+                sb.append("<<<<<<< HEAD\n");
+                String currBlobName = currMap.get(fileName);
+                String currContents = readBlob(currBlobName);
+                sb.append(currContents);
+                sb.append("=======");
+                String otherBlobName = otherMap.get(fileName);
+                String otherContents = readBlob(otherBlobName);
+                sb.append(otherContents);
+                String newContents = sb.toString();
+                writeWorkingFile(fileName, newContents);
+                String blobName = sha1(newContents);
+                writeBlob(blobName, newContents);
+                addition.put(fileName, blobName);
+                removal.remove(fileName);
+            }
+            writeAddition(addition);
+            writeRemoval(removal);
+        }
     }
 
     // ==================== commit helper functions ====================
@@ -467,6 +575,9 @@ public class Repository {
 
     /** Return whether the specified branch exists. */
     private static boolean branchExists(String branch) {
+        if (branch == null || branch.isBlank()) {
+            return false;
+        }
         File branchF = join(BRANCHES_FOLDER, branch);
         return branchF.exists();
     }
@@ -593,13 +704,14 @@ public class Repository {
     // ==================== other helper functions ====================
 
     /** Create gitlet related directories. */
-    private static void setupPersistence() {
-        GITLET_DIR.mkdir();
-        BLOBS_FOLDER.mkdir();
-        Commit.COMMIT_FOLDER.mkdir();
-        STAGING_FOLDER.mkdir();
-        BRANCHES_FOLDER.mkdir();
+    private static boolean setupPersistence() {
+        boolean res = GITLET_DIR.mkdir();
+        res &= BLOBS_FOLDER.mkdir();
+        res &= Commit.COMMIT_FOLDER.mkdir();
+        res &= STAGING_FOLDER.mkdir();
+        res &= BRANCHES_FOLDER.mkdir();
         clearStagingArea();
+        return res;
     }
 
     /** Get the corresponding commit id represent by the shorted id. */
@@ -618,7 +730,7 @@ public class Repository {
      * Helper function for handleCheckout.
      * Use contents in blob to overwrite file in working directory(CWD).
      */
-    private static void overwriteFile(String fileName, String blobName) {
+    private static void overwriteWorkingFile(String fileName, String blobName) {
         if (!blobExists(blobName)) {
             return;
         }
@@ -629,13 +741,30 @@ public class Repository {
 
     /** Return files that are tracked by the specified commit. */
     private static Set<String> getTrackedFiles(String commitId) {
-        if (commitId == null || commitId.isBlank() || !Commit.commitExists(commitId)) {
+        if (!Commit.commitExists(commitId)) {
+            return null;
+        }
+
+        Map<String, String> map = getTrackedMap(commitId);
+        assert (map != null);
+        return map.keySet();
+    }
+
+    /** Return the map of the specified commit. */
+    private static Map<String, String> getTrackedMap(String commitId) {
+        if (!Commit.commitExists(commitId)) {
             return null;
         }
 
         Commit commit = Commit.fromFile(commitId);
-        HashMap<String, String> map = commit.getMap();
-        return map.keySet();
+        assert (commit != null);
+        return commit.getMap();
+    }
+
+    /** Return the map of the head commit. */
+    private static Map<String, String> getHeadMap() {
+        String head = getHeadCommitId();
+        return getTrackedMap(head);
     }
 
     /**
@@ -646,9 +775,7 @@ public class Repository {
      */
     private static Set<String> getModifiedNotStagedFiles() {
         Set<String> modified = new HashSet<>();
-
-        Commit headC = getHeadCommit();
-        Map<String, String> currentMap = headC.getMap();
+        Map<String, String> currentMap = getHeadMap();
         Map<String, String> workingMap = getWorkingMap();
         Map<String, String> additionMap = readAddition();
 
@@ -679,6 +806,7 @@ public class Repository {
 
         String head = getHeadCommitId();
         Set<String> trackedSet = getTrackedFiles(head);
+        assert (trackedSet != null);
         Set<String> workingSet = getWorkingFiles();
         Set<String> additionSet = getStagedFiles();
         Set<String> removalSet = readRemoval();
@@ -707,6 +835,7 @@ public class Repository {
         Set<String> addition = readAddition().keySet();
         String headCommitId = getHeadCommitId();
         Set<String> trackedFiles = getTrackedFiles(headCommitId);
+        assert (trackedFiles != null);
         Set<String> untrackedFiles = new HashSet<>();
         Set<String> workingFiles = getWorkingFiles();
         for (String file : workingFiles) {
@@ -722,7 +851,7 @@ public class Repository {
      * @return a formatted log for the specified commit.
      */
     private static String logForOneCommit(String commitId) {
-        if (commitId.isBlank() || !Commit.commitExists(commitId)) {
+        if (!Commit.commitExists(commitId)) {
             return null;
         }
 
@@ -730,6 +859,7 @@ public class Repository {
         Formatter formatter = new Formatter(sb);
         SimpleDateFormat sdf = new SimpleDateFormat("EEE MMM d HH:mm:ss yyyy Z", Locale.ENGLISH);
         Commit commit = Commit.fromFile(commitId);
+        assert (commit != null);
 
         sb.append("===\n");
         // print commit + hash
@@ -763,10 +893,105 @@ public class Repository {
     private static void deleteUnnecessaryFiles(String targetCommitId) {
         String currentCommitId = getHeadCommitId();
         Set<String> currentFiles = getTrackedFiles(currentCommitId);
+        assert (currentFiles != null);
         Set<String> targetFiles = getTrackedFiles(targetCommitId);
+        assert (targetFiles != null);
         currentFiles.removeAll(targetFiles);
         for (String file : currentFiles) {
             deleteWorkingFile(file);
         }
+    }
+
+    /**
+     * Helper function for merge.
+     * Return all the previous commits' id of the given commit (include itself).
+     */
+    private static Set<String> getAncestors(String head) {
+        if (!Commit.commitExists(head)) {
+            throw new GitletException("No such commit exists");
+        }
+        Set<String> ans = new HashSet<>();
+        Queue<String> queue = new ArrayDeque<>();
+        queue.add(head);
+        while (!queue.isEmpty()) {
+            int size = queue.size();
+            for (int i = 0; i < size; i++) {
+                String commitId = queue.remove();
+                ans.add(commitId);
+                Commit commit = Commit.fromFile(commitId);
+                assert (commit != null);
+                String firstParent = commit.getFirstParent();
+                if (firstParent != null) {
+                    queue.add(firstParent);
+                }
+                String secondParent = commit.getSecondParent();
+                if (secondParent != null) {
+                    queue.add(secondParent);
+                }
+            }
+        }
+        return ans;
+    }
+
+    /**
+     * Helper function for merge.
+     * Find the split point of the current branch and the given branch.
+     * The split point is the latest common ancestor of the current and given branch heads.
+     */
+    private static String findSplitPoint(String otherB) {
+        String currCommitId = getHeadCommitId();
+        String otherCommitId = readBranch(otherB);
+        Set<String> otherAncestors = getAncestors(otherCommitId);
+        if (otherAncestors.contains(currCommitId)) {
+            return currCommitId;
+        }
+        Set<String> currAncestors = getAncestors(currCommitId);
+        if (currAncestors.contains(otherCommitId)) {
+            return otherCommitId;
+        }
+
+        Queue<String> queue = new ArrayDeque<>();
+        queue.add(currCommitId);
+        while (!queue.isEmpty()) {
+            int size = queue.size();
+            for (int i = 0; i < size; i++) {
+                String commitId = queue.remove();
+                Commit c = Commit.fromFile(commitId);
+                if (c == null) {
+                    continue;
+                }
+                if (otherAncestors.contains(commitId)) {
+                    return commitId;
+                }
+                queue.add(c.getFirstParent());
+                queue.add(c.getSecondParent());
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Helper function for merge.
+     * Return all files that are modified in currM compared with pervM.
+     * A modified file is a file that newly added in currM or its contents has changed.
+     */
+    private static Set<String> getModifiedFiles(Map<String, String> currM, Map<String, String> prevM) {
+        Set<String> result = new HashSet<>();
+        for (String file : currM.keySet()) {
+            if (!prevM.containsKey(file) || !prevM.get(file).equals(currM.get(file))) {
+                result.add(file);
+            }
+        }
+        return result;
+    }
+
+    /**
+     * Helper function for merge.
+     * Return all files that are removed from prevS.
+     */
+    private static Set<String> getRemovedFiles(Set<String> currS, Set<String> prevS) {
+        Set<String> result = new HashSet<>(prevS);
+        result.removeAll(currS);
+        return result;
     }
 }

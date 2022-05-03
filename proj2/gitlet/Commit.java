@@ -4,6 +4,8 @@ import java.io.File;
 import java.io.Serializable;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.Map;
+
 import static gitlet.Utils.*;
 
 /** Represents a gitlet commit object.
@@ -37,10 +39,10 @@ public class Commit implements Serializable {
     private final String secondParent;
 
     /** A map contains all files and their versions. */
-    private final HashMap<String, String> map;
+    private final Map<String, String> map;
 
     public Commit(String message, Date date, String firstParent,
-                  String secondParent, HashMap<String, String> map) {
+                  String secondParent, Map<String, String> map) {
         this.message = message;
         this.date = date;
         this.firstParent = firstParent;
@@ -49,8 +51,8 @@ public class Commit implements Serializable {
     }
 
     /** Return a copy of the map. */
-    public HashMap<String, String> getMap() {
-        return (HashMap<String, String>) map.clone();
+    public Map<String, String> getMap() {
+        return map;
     }
 
     public Date getDate() {
@@ -71,13 +73,16 @@ public class Commit implements Serializable {
 
     /** Return whether the specified commit exists. */
     public static boolean commitExists(String commitId) {
+        if (commitId == null || commitId.isBlank()) {
+            return false;
+        }
         File commitF = join(COMMIT_FOLDER, commitId);
         return commitF.exists();
     }
 
     /** Return the specified commit object. */
     public static Commit fromFile(String commitId) {
-        if (commitId == null || commitId.isBlank() || !commitExists(commitId)) {
+        if (!commitExists(commitId)) {
             return null;
         }
 
