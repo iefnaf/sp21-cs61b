@@ -451,16 +451,13 @@ public class Repository {
             exitWithMessage("Current branch fast-forwarded.");
         }
 
-        // we need to remove files that were only removed by other branch.
         Set<String> currTrackedFiles = getTrackedFiles(currCommitId);
         Set<String> splitTrackedFiles = getTrackedFiles(splitCommitId);
         Set<String> otherTrackedFiles = getTrackedFiles(otherCommitId);
         Set<String> currRemovedFiles = getRemovedFiles(currTrackedFiles, splitTrackedFiles);
         Set<String> otherRemovedFiles = getRemovedFiles(otherTrackedFiles, splitTrackedFiles);
-        Set<String> filesToRemove = new HashSet<>(otherRemovedFiles);
-        filesToRemove.removeAll(currRemovedFiles);
-
-        // Any files modified in different ways in the current and given branches are in conflict.
+        Set<String> currAddedFiles = getAddedFiles(currTrackedFiles, splitTrackedFiles);
+        Set<String> otherAddedFiles = getAddedFiles(otherTrackedFiles, splitTrackedFiles);
         Map<String, String> currMap = getTrackedMap(currCommitId);
         assert (currMap != null);
         Map<String, String> splitMap = getTrackedMap(splitCommitId);
@@ -469,11 +466,25 @@ public class Repository {
         assert (otherMap != null);
         Set<String> currModifiedFiles = getModifiedFiles(currMap, splitMap);
         Set<String> otherModifiedFiles = getModifiedFiles(otherMap, splitMap);
-        Set<String> unConflictFiles = new HashSet<>();
+
+        // Any files modified in different ways in the current and given branches are in conflict.
+        Set<String> filesToRemove = new HashSet<>();
+        Set<String> filesToAdd = new HashSet<>();
         Set<String> conflictFiles = new HashSet<>();
-        for (String file : otherModifiedFiles) {
-            if (!currModifiedFiles.contains(file)) {
-                unConflictFiles.add(file);
+
+        for (String file : otherRemovedFiles) {
+            if (currModifiedFiles.contains(file)) {
+                conflictFiles.add(file);
+            } else {
+                if (!currRemovedFiles.contains(file)) {
+                    filesToRemove.add(file);
+                }
+            }
+        }
+
+        for (String file : otherAddedFiles) {
+            if (!currAddedFiles.contains(file)) {
+                filesToAdd.add(file);
             } else {
                 if (!currMap.get(file).equals(otherMap.get(file))) {
                     conflictFiles.add(file);
@@ -481,9 +492,23 @@ public class Repository {
             }
         }
 
+        for (String file : otherModifiedFiles) {
+            if (currRemovedFiles.contains(file)) {
+                conflictFiles.add(file);
+            } else {
+                if (!currModifiedFiles.contains(file)) {
+                    filesToAdd.add(file);
+                } else {
+                    if (!currMap.get(file).equals(otherMap.get(file))) {
+                        conflictFiles.add(file);
+                    }
+                }
+            }
+        }
+
         Set<String> untrackedFiles = getUntrackedFiles();
         for (String file : untrackedFiles) {
-            if (filesToRemove.contains(file) || unConflictFiles.contains(file) ||
+            if (filesToRemove.contains(file) || filesToAdd.contains(file) ||
                     conflictFiles.contains(file)) {
                 exitWithError("There is an untracked file in the way; " +
                         "delete it, or add and commit it first.");
@@ -499,7 +524,7 @@ public class Repository {
             removal.add(fileName);
         }
 
-        for (String fileName : unConflictFiles) {
+        for (String fileName : filesToAdd) {
             String blobName = otherMap.get(fileName);
             overwriteWorkingFile(fileName, blobName);
             addition.put(fileName, blobName);
@@ -516,13 +541,18 @@ public class Repository {
             for (String fileName : conflictFiles) {
                 StringBuilder sb = new StringBuilder();
                 sb.append("<<<<<<< HEAD\n");
-                String currBlobName = currMap.get(fileName);
-                String currContents = readBlob(currBlobName);
-                sb.append(currContents);
+                if (currTrackedFiles.contains(fileName)) {
+                    String currBlobName = currMap.get(fileName);
+                    String currContents = readBlob(currBlobName);
+                    sb.append(currContents);
+                }
                 sb.append("=======");
-                String otherBlobName = otherMap.get(fileName);
-                String otherContents = readBlob(otherBlobName);
-                sb.append(otherContents);
+                if (otherTrackedFiles.contains(fileName)) {
+                    String otherBlobName = otherMap.get(fileName);
+                    String otherContents = readBlob(otherBlobName);
+                    sb.append(otherContents);
+                }
+                sb.append(">>>>>>>\n");
                 String newContents = sb.toString();
                 writeWorkingFile(fileName, newContents);
                 String blobName = sha1(newContents);
@@ -977,13 +1007,12 @@ public class Repository {
 
     /**
      * Helper function for merge.
-     * Return all files that are modified in currM compared with pervM.
-     * A modified file is a file that newly added in currM or its contents has changed.
+     * Return all files that are modified.
      */
     private static Set<String> getModifiedFiles(Map<String, String> currM, Map<String, String> prevM) {
         Set<String> result = new HashSet<>();
         for (String file : currM.keySet()) {
-            if (!prevM.containsKey(file) || !prevM.get(file).equals(currM.get(file))) {
+            if (prevM.containsKey(file) && !prevM.get(file).equals(currM.get(file))) {
                 result.add(file);
             }
         }
@@ -992,7 +1021,17 @@ public class Repository {
 
     /**
      * Helper function for merge.
-     * Return all files that are removed from prevS.
+     * Return all files that are added.
+     */
+    private static Set<String> getAddedFiles(Set<String> currS, Set<String> prevS) {
+        Set<String> result = new HashSet<>(currS);
+        result.removeAll(prevS);
+        return result;
+    }
+
+    /**
+     * Helper function for merge.
+     * Return all files that are removed.
      */
     private static Set<String> getRemovedFiles(Set<String> currS, Set<String> prevS) {
         Set<String> result = new HashSet<>(prevS);
