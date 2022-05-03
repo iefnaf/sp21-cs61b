@@ -956,15 +956,19 @@ public class Repository {
             int size = queue.size();
             for (int i = 0; i < size; i++) {
                 String commitId = queue.remove();
-                Commit c = Commit.fromFile(commitId);
-                if (c == null) {
-                    continue;
-                }
                 if (otherAncestors.contains(commitId)) {
                     return commitId;
                 }
-                queue.add(c.getFirstParent());
-                queue.add(c.getSecondParent());
+                Commit c = Commit.fromFile(commitId);
+                assert (c != null);
+                String firstParent = c.getFirstParent();
+                if (firstParent != null) {
+                    queue.add(firstParent);
+                }
+                String secondParent = c.getSecondParent();
+                if (secondParent != null) {
+                    queue.add(secondParent);
+                }
             }
         }
         return null;
