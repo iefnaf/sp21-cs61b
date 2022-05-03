@@ -531,12 +531,7 @@ public class Repository {
             removal.remove(fileName);
         }
 
-        if (conflictFiles.isEmpty()) {
-            writeAddition(addition);
-            writeRemoval(removal);
-            String message = String.format("Merged %s into %s.", otherB, currB);
-            handleCommit(message);
-        } else {
+        if (!conflictFiles.isEmpty()) {
             System.out.println("Encountered a merge conflict.");
             for (String fileName : conflictFiles) {
                 StringBuilder sb = new StringBuilder();
@@ -560,9 +555,15 @@ public class Repository {
                 addition.put(fileName, blobName);
                 removal.remove(fileName);
             }
-            writeAddition(addition);
-            writeRemoval(removal);
         }
+
+        String message = String.format("Merged %s into %s.", otherB, currB);
+        currMap.putAll(addition);
+        removal.forEach(currMap::remove);
+        Commit newC = new Commit(message, new Date(System.currentTimeMillis()), currCommitId, otherCommitId, currMap);
+        String newHead = Commit.saveCommit(newC);
+        writeBranch(currB, newHead);
+        clearStagingArea();
     }
 
     // ==================== commit helper functions ====================
