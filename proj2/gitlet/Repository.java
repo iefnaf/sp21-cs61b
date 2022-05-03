@@ -546,7 +546,7 @@ public class Repository {
                     String currContents = readBlob(currBlobName);
                     sb.append(currContents);
                 }
-                sb.append("=======");
+                sb.append("=======\n");
                 if (otherTrackedFiles.contains(fileName)) {
                     String otherBlobName = otherMap.get(fileName);
                     String otherContents = readBlob(otherBlobName);
